@@ -978,19 +978,22 @@ void TileMap::update_cell_bitmask(int p_x, int p_y) {
 						mask |= TileSet::BIND_BOTTOMRIGHT;
 					}
 				}
-				if (tile_set->is_tile_bound(id, get_cell(p_x, p_y - 1))) {
+				if (tile_set->is_tile_bound(id, get_cell(p_x, p_y - 1)) && _get_edge_hashed(p, PosKey(p_x, p_y - 1))) {
 					mask |= TileSet::BIND_TOP;
 				}
-				if (tile_set->is_tile_bound(id, get_cell(p_x - 1, p_y))) {
+				if (tile_set->is_tile_bound(id, get_cell(p_x - 1, p_y)) && _get_edge_hashed(p, PosKey(p_x - 1, p_y))) {
 					mask |= TileSet::BIND_LEFT;
 				}
 				mask |= TileSet::BIND_CENTER;
-				if (tile_set->is_tile_bound(id, get_cell(p_x + 1, p_y))) {
+				if (tile_set->is_tile_bound(id, get_cell(p_x + 1, p_y)) && _get_edge_hashed(p, PosKey(p_x + 1, p_y))) {
 					mask |= TileSet::BIND_RIGHT;
 				}
-				if (tile_set->is_tile_bound(id, get_cell(p_x, p_y + 1))) {
+				if (tile_set->is_tile_bound(id, get_cell(p_x, p_y + 1)) && _get_edge_hashed(p, PosKey(p_x, p_y + 1))) {
 					mask |= TileSet::BIND_BOTTOM;
 				}
+			}
+			if (edge_hash != 0) {
+				mask &= ~(TileSet::BIND_TOPLEFT | TileSet::BIND_TOPRIGHT | TileSet::BIND_BOTTOMLEFT | TileSet::BIND_BOTTOMRIGHT);
 			}
 			Vector2 coord = tile_set->autotile_get_subtile_for_bitmask(id, mask, this, Vector2(p_x, p_y));
 			E->get().autotile_coord_x = (int)coord.x;
@@ -1687,6 +1690,28 @@ bool TileMap::get_clip_uv() const {
 	return clip_uv;
 }
 
+void TileMap::set_edge_hash(int p_edge_hash) {
+	edge_hash = p_edge_hash;
+}
+
+int TileMap::get_edge_hash() const {
+	return edge_hash;
+}
+
+bool TileMap::_get_edge_hashed(PosKey p_pos1, PosKey p_pos2) {
+	if (edge_hash == 0)
+		return true;
+	int x = MAX(p_pos1.x, p_pos2.x) * 2 + (p_pos1.x == p_pos2.x ? 1 : 0);
+	int y = MAX(p_pos1.y, p_pos2.y) * 2 + (p_pos1.y == p_pos2.y ? 1 : 0);
+	pcg32_random_t *pcg_ptr = new pcg32_random_t();
+	pcg32_srandom_r(pcg_ptr, (x * 100) + y, edge_hash);
+	uint32_t randi = pcg32_random_r(pcg_ptr);
+	delete pcg_ptr;
+	int lfsr = edge_hash ^ (edge_hash << 1) ^ (edge_hash << 3);
+	lfsr = ((lfsr * x) ^ ((y + edge_hash) << (lfsr % 5))) ^ ((edge_hash * y) ^ ((x + lfsr) << (edge_hash % 3)));
+	return ((randi >> 0) ^ (randi >> 1) ^ (randi >> 2) ^ (randi >> 3) ^ (randi >> 4) ^ (randi >> 5) ^ (randi >> 6) ^ (randi >> 7) ^ (randi >> 9)) & 1;
+}
+
 String TileMap::get_configuration_warning() const {
 	String warning = Node2D::get_configuration_warning();
 
@@ -1764,6 +1789,9 @@ void TileMap::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_occluder_light_mask", "mask"), &TileMap::set_occluder_light_mask);
 	ClassDB::bind_method(D_METHOD("get_occluder_light_mask"), &TileMap::get_occluder_light_mask);
 
+	ClassDB::bind_method(D_METHOD("set_edge_hash", "value"), &TileMap::set_edge_hash);
+	ClassDB::bind_method(D_METHOD("get_edge_hash"), &TileMap::get_edge_hash);
+
 	ClassDB::bind_method(D_METHOD("set_cell", "x", "y", "tile", "flip_x", "flip_y", "transpose", "autotile_coord"), &TileMap::set_cell, DEFVAL(false), DEFVAL(false), DEFVAL(false), DEFVAL(Vector2()));
 	ClassDB::bind_method(D_METHOD("set_cellv", "position", "tile", "flip_x", "flip_y", "transpose"), &TileMap::set_cellv, DEFVAL(false), DEFVAL(false), DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("_set_celld", "position", "data"), &TileMap::_set_celld);
@@ -1796,6 +1824,7 @@ void TileMap::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "mode", PROPERTY_HINT_ENUM, "Square,Isometric,Custom"), "set_mode", "get_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "tile_set", PROPERTY_HINT_RESOURCE_TYPE, "TileSet"), "set_tileset", "get_tileset");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "edge_hash"), "set_edge_hash", "get_edge_hash");
 
 	ADD_GROUP("Cell", "cell_");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "cell_size", PROPERTY_HINT_RANGE, "1,8192,1"), "set_cell_size", "get_cell_size");
@@ -1870,6 +1899,7 @@ TileMap::TileMap() {
 	occluder_light_mask = 1;
 	clip_uv = false;
 	format = FORMAT_1; // Assume lowest possible format if none is present
+	edge_hash = 0;
 
 	fp_adjust = 0.00001;
 	tile_origin = TILE_ORIGIN_TOP_LEFT;

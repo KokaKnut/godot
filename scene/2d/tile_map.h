@@ -193,6 +193,7 @@ private:
 	uint32_t collision_layer;
 	uint32_t collision_mask;
 	mutable DataFormat format;
+	int edge_hash;
 
 	TileOrigin tile_origin;
 
@@ -221,6 +222,8 @@ private:
 
 	void _set_old_cell_size(int p_size) { set_cell_size(Size2(p_size, p_size)); }
 	int _get_old_cell_size() const { return cell_size.x; }
+
+	bool _get_edge_hashed(PosKey p_pos1, PosKey p_pos2);
 
 	_FORCE_INLINE_ Vector2 _map_to_world(int p_x, int p_y, bool p_ignore_ofs = false) const;
 
@@ -339,6 +342,9 @@ public:
 
 	void set_clip_uv(bool p_enable);
 	bool get_clip_uv() const;
+
+	void set_edge_hash(int p_edge_hash);
+	int get_edge_hash() const;
 
 	String get_configuration_warning() const override;
 
